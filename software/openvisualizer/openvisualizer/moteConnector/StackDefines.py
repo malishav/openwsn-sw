@@ -1,6 +1,6 @@
 # DO NOT EDIT DIRECTLY!
 # This file was generated automatically by GenStackDefines.py
-# on Mon, 14 Aug 2017 10:37:31
+# on Fri, 01 Sep 2017 14:05:53
 #
 
 components = {
@@ -125,6 +125,8 @@ errorDescriptions = {
   71: "OSCOAP replay protection failed",
   72: "OSCOAP decryption and tag verification failed",
   73: "Aborted join process {code location {0}}",
+  74: "[ARMOUR] Eavesdropping FAIL.",
+  75: "[ARMOUR] Eavesdropping SUCCESS.",
 }
 
 sixtop_returncode = {
