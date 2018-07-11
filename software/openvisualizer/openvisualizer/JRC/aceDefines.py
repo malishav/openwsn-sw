@@ -29,3 +29,13 @@ ACE_CBOR_ABBREVIATIONS_PASSWORD             = 0
 ACE_CBOR_ABBREVIATIONS_AUTHORIZATION_CODE   = 1
 ACE_CBOR_ABBREVIATIONS_CLIENT_CREDENTIALS   = 2
 ACE_CBOR_ABBREVIATIONS_REFRESH_TOKEN        = 3
+
+ACE_OSCORE_PROFILE_ID                       = 23
+
+ACE_ACCESS_TOKEN_TYPE_BEARER                = 1
+ACE_ACCESS_TOKEN_TYPE_POP                   = 2
+
+# from https://tools.ietf.org/html/draft-ietf-ace-cwt-proof-of-possession-03#section-3.1
+ACE_CWT_CNF_COSE_KEY                        = 1
+ACE_CWT_CNF_ENCRYPTED_COSE_KEY              = 2
+ACE_CWT_CNF_KID                             = 3

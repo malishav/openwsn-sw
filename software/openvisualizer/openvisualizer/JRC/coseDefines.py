@@ -5,6 +5,10 @@ KEY_LABEL_ALG                          = 3
 KEY_LABEL_KEYOPS                       = 4
 KEY_LABEL_BASEIV                       = 5
 KEY_LABEL_K                            = -1
+KEY_LABEL_CLIENT_ID                    = 6      # value TBD by IANA, registered in draft-ietf-ace-oscore-profile-02
+KEY_LABEL_SERVER_ID                    = 7      # value TBD by IANA, registered in draft-ietf-ace-oscore-profile-02
+KEY_LABEL_KDF                          = 8      # value TBD by IANA, registered in draft-ietf-ace-oscore-profile-02
+KEY_LABEL_SLT                          = 9      # value TBD by IANA, registered in draft-ietf-ace-oscore-profile-02
 KEY_LABEL_ALL = [
     KEY_LABEL_KTY,
     KEY_LABEL_KID,
@@ -12,6 +16,10 @@ KEY_LABEL_ALL = [
     KEY_LABEL_KEYOPS,
     KEY_LABEL_BASEIV,
     KEY_LABEL_K,
+    KEY_LABEL_CLIENT_ID,
+    KEY_LABEL_SERVER_ID,
+    KEY_LABEL_KDF,
+    KEY_LABEL_SLT,
 ]
 
 # COSE key values
