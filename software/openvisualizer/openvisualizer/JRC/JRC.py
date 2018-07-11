@@ -22,6 +22,22 @@ import cbor
 import binascii
 import os
 
+# ======================== List of nodes that have joined ========================
+# format:
+# {
+#   'eui64' : node_address_hex_string,
+#   'context' : oscoap.SecurityContext
+# }
+joinedNodes = []
+
+# id as a string
+def joinedNodesLookup(id):
+    for node in joinedNodes:
+        if node['eui64'] == id:
+            return node
+
+    return None
+
 # ======================== Top Level JRC Class =============================
 class JRC():
     def __init__(self):
@@ -49,21 +65,22 @@ class contextHandler():
 
         # if eui-64 is found in the list of joined nodes, return the appropriate context
         # this is important for replay protection
-        for dict in self.joinResource.joinedNodes:
-            if dict['eui64'] == u.buf2str(eui64):
-                log.info("Node {0} found in joinedNodes. Returning context {1}.".format(binascii.hexlify(dict['eui64']),
-                                                                                        str(dict['context'])))
-                return dict['context']
+        node = joinedNodesLookup(u.buf2str(eui64))
 
-        # if eui-64 is not found, create a new tentative context but only add it to the list of joined nodes in the GET
-        # handler of the join resource
-        context = oscoap.SecurityContext(masterSecret=self.MASTERSECRET,
-                                         senderID=u.buf2str(senderID),
-                                         recipientID=u.buf2str(recipientID),
-                                         aeadAlgorithm=oscoap.AES_CCM_16_64_128())
+        if node is not None:
+            log.info("Node {0} found in joinedNodes. Returning context {1}.".format(binascii.hexlify(node['eui64']),
+                                                                                    str(node['context'])))
+            context = node['context']
+        else:
+            log.info("Node {0} not found in joinedNodes. Instantiating new context based on the master secret.".format(
+                binascii.hexlify(u.buf2str(eui64))))
 
-        log.info("Node {0} not found in joinedNodes. Instantiating new context based on the master secret.".format(
-            binascii.hexlify(u.buf2str(eui64))))
+            # if eui-64 is not found, create a new tentative context but only add it to the list of joined nodes in the GET
+            # handler of the join resource
+            context = oscoap.SecurityContext(masterSecret=self.MASTERSECRET,
+                                             senderID=u.buf2str(senderID),
+                                             recipientID=u.buf2str(recipientID),
+                                             aeadAlgorithm=oscoap.AES_CCM_16_64_128())
 
         return context
 
@@ -248,7 +265,6 @@ class coapServer(eventBusClient.eventBusClient):
 # ==================== Implementation of CoAP join resource =====================
 class joinResource(coapResource.coapResource):
     def __init__(self):
-        self.joinedNodes = []
 
         #self.networkKey = u.str2buf(os.urandom(16)) # random key every time OpenVisualizer is initialized
         self.networkKey = u.str2buf(binascii.unhexlify('11111111111111111111111111111111')) # value of K1/K2 from 6TiSCH TD
@@ -278,7 +294,7 @@ class joinResource(coapResource.coapResource):
         #objectSecurity = oscoap.objectSecurityOptionLookUp(options)
         #assert objectSecurity
 
-        #self.joinedNodes += [{'eui64' : u.buf2str(objectSecurity.kid[:8]), # remove last prepended byte
+        #joinedNodes += [{'eui64' : u.buf2str(objectSecurity.kid[:8]), # remove last prepended byte
         #                'context' : objectSecurity.context}]
 
         return (respCode,respOptions,respPayload)
