@@ -13,6 +13,7 @@ except ImportError:
     pass
 
 import cojpDefines
+import coseDefines
 import aceDefines
 
 log = logging.getLogger('JRC')
@@ -348,9 +349,17 @@ class tokenResource(coapResource.coapResource):
             clientId =  u.buf2str(objectSecurity.kid[:8])
 
             # if the client that is requesting an access token is not in the list of joined nodes, consider it unauthorized
-            if joinedNodesLookup(u.buf2str(clientId)) is None:
+            client = joinedNodesLookup(u.buf2str(clientId))
+            if client is None:
                 raise AceUnauthorized
             # else: every joined node is considered authorized
+
+            # we don't use aud parameter for the moment, RS is selected randomly by AS from the list of joined nodes
+            # this allows the JRC to act as a discovery server, allowing the client to specify the resource it is interested in
+            # and the JRC to communicate to the cliient which RS hosts such a resource
+            # client contacts the RS by constructing its IPv6 address, based on RS's identifier (EUI-64), assuming they are
+            # in the same 6TiSCH network
+            resourceServer = pickJoinedNodeRandomly(skip=client)
 
             # proceed by checking the request format
             contentFormat = self.lookupContentFormat(options)
@@ -365,8 +374,72 @@ class tokenResource(coapResource.coapResource):
             if request[aceDefines.ACE_PARAMETERS_LABELS_SCOPE] not in authorizedResources:
                 raise AceUnauthorized
 
-            # TODO construct the access token
+            # construct the access token
+
+            # Step 1. construct the CNF (confirmation) claim
+            cnf_value = {
+                aceDefines.ACE_CWT_CNF_COSE_KEY : {
+                    coseDefines.KEY_LABEL_KTY           : coseDefines.KEY_VALUE_SYMMETRIC,
+                    coseDefines.KEY_LABEL_ALG           : coseDefines.ALG_AES_CCM_16_64_128,
+                    coseDefines.KEY_LABEL_CLIENT_ID     : clientId,
+                    coseDefines.KEY_LABEL_SERVER_ID     : resourceServer['eui64'],
+                    coseDefines.KEY_LABEL_K             : os.urandom(16),  # generate random 128-bit key
+                }
+            }
+
+            # Step 2. Construct CWT claims set
+            cwt_claims_set = {}
+            cwt_claims_set[aceDefines.ACE_PARAMETERS_LABELS_SCOPE] = request[aceDefines.ACE_PARAMETERS_LABELS_SCOPE]
+            cwt_claims_set[aceDefines.ACE_PARAMETERS_LABELS_CNF] = cnf_value
+
+            # Step 3. Construct CWT by encrypting in a COSE_Encrypt0 wrapper the CWT claims set
+
+            # COSE_Encrypt0 protected bucket
+            cwt_protected = {
+                coseDefines.COMMON_HEADER_PARAMETERS_ALG : coseDefines.ALG_AES_CCM_16_64_128
+            }
+
+            # COSE_Encrypt0 unprotected bucket
+            # generate a random 13-byte nonce FIXME can we use AES-CCM with 7-byte nonces here?
+            nonce = os.urandom(13)
+            cwt_unprotected = {
+                coseDefines.COMMON_HEADER_PARAMETERS_IV : nonce
+            }
+
+            # COSE Enc_structure from https://tools.ietf.org/html/draft-ietf-cose-msg-24#section-5.3
+            encStructure = [
+                unicode('Encrypt0'),
+                cbor.dumps(cwt_protected),
+                '',
+            ]
+
+            # the key to encrypt the CWT is derived from the OSCORE master secret, with info set to 'ACE'
+            key = oscoap. _hkdfDeriveParameter(masterSecret=resourceServer['context'].masterSecret,
+                                               masterSalt=resourceServer['context'].masterSalt,
+                                               id=resourceServer['context'].senderId,
+                                               algorithm=coseDefines.AES_CCM_16_64_128,
+                                               type='ACE',
+                                               length=16)
+
+            # generate the ciphertext by encrypting with the CCM algorithm
+            ciphertext = oscoap.AES_CCM_16_64_128().authenticateAndEncrypt(aad=cbor.dumps(encStructure),
+                                                                           plaintext=cbor.dumps(cwt_claims_set),
+                                                                           key=key,
+                                                                           nonce=nonce)
+
+            # Step 4. Construct the CWT object
+            cwt = [
+                cwt_protected,
+                cwt_unprotected,
+                ciphertext
+            ]
+
             access_token = {}
+            access_token[aceDefines.ACE_PARAMETERS_LABELS_TOKEN_TYPE] = aceDefines.ACE_ACCESS_TOKEN_TYPE_POP    # FIXME can be removed
+            access_token[aceDefines.ACE_PARAMETERS_LABELS_ACCESS_TOKEN] = cbor.dumps(cwt)
+            access_token[aceDefines.ACE_PARAMETERS_LABELS_PROFILE] = aceDefines.ACE_OSCORE_PROFILE_ID           # FIXME can be removed
+            access_token[aceDefines.ACE_PARAMETERS_LABELS_CNF] = cnf_value
+
             access_token_serialized = cbor.dumps(access_token)
 
             respCode = d.COAP_RC_2_04_CHANGED
