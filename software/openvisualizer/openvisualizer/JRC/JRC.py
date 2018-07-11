@@ -351,11 +351,12 @@ class tokenResource(coapResource.coapResource):
             if request[aceDefines.ACE_PARAMETERS_LABELS_SCOPE] not in authorizedResources:
                 raise AceUnauthorized
 
-            configuration = {}
-            configuration_serialized = cbor.dumps(configuration)
+            # TODO construct the access token
+            access_token = {}
+            access_token_serialized = cbor.dumps(access_token)
 
             respCode = d.COAP_RC_2_04_CHANGED
-            respPayload = [ord(b) for b in configuration_serialized]
+            respPayload = [ord(b) for b in access_token_serialized]
         except (AceBadRequest, TypeError, NameError):
             respCode = d.COAP_RC_4_00_BADREQUEST
         except AceUnauthorized:
