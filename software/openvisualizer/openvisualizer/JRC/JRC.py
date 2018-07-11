@@ -13,6 +13,7 @@ except ImportError:
     pass
 
 import cojpDefines
+import aceDefines
 
 log = logging.getLogger('JRC')
 log.setLevel(logging.ERROR)
@@ -37,6 +38,11 @@ def joinedNodesLookup(id):
             return node
 
     return None
+
+
+# ============ List of resources that can be accessed by any joined node =========
+
+authorizedResources = ['resource1']
 
 # ======================== Top Level JRC Class =============================
 class JRC():
@@ -298,6 +304,94 @@ class joinResource(coapResource.coapResource):
         #                'context' : objectSecurity.context}]
 
         return (respCode,respOptions,respPayload)
+
+# ==================== Implementation of /token resource for implementing ACE framework =====================
+
+class tokenResource(coapResource.coapResource):
+
+    def __init__(self):
+
+        # initialize parent class
+        coapResource.coapResource.__init__(
+            self,
+            path = 'token',
+        )
+
+        self.addSecurityBinding((None, [d.METHOD_POST]))  # security context should be returned by the callback
+
+    def POST(self,options=[], payload=[]):
+
+        respOptions     = []
+        respPayload     = []
+
+        try:
+            objectSecurity = oscoap.objectSecurityOptionLookUp(options)
+
+            # the request MUST come be received over a secure OSCORE channel
+            if objectSecurity is None:
+                raise AceUnauthorized
+
+            clientId =  u.buf2str(objectSecurity.kid[:8])
+
+            # if the client that is requesting an access token is not in the list of joined nodes, consider it unauthorized
+            if joinedNodesLookup(u.buf2str(clientId)) is None:
+                raise AceUnauthorized
+            # else: every joined node is considered authorized
+
+            # proceed by checking the request format
+            contentFormat = self.lookupContentFormat(options)
+            if contentFormat is not None and contentFormat.format == d.FORMAT_CBOR:
+                raise TypeError
+
+            request = cbor.loads(u.buf2str(payload))
+
+            if request[aceDefines.ACE_PARAMETERS_LABELS_GRANT_TYPE] != aceDefines.ACE_CBOR_ABBREVIATIONS_CLIENT_CREDENTIALS:
+                raise AceBadRequest
+
+            if request[aceDefines.ACE_PARAMETERS_LABELS_SCOPE] not in authorizedResources:
+                raise AceUnauthorized
+
+            configuration = {}
+            configuration_serialized = cbor.dumps(configuration)
+
+            respCode = d.COAP_RC_2_04_CHANGED
+            respPayload = [ord(b) for b in configuration_serialized]
+        except (AceBadRequest, TypeError, NameError):
+            respCode = d.COAP_RC_4_00_BADREQUEST
+        except AceUnauthorized:
+            respCode = d.COAP_RC_4_01_UNAUTHORIZED
+
+        return (respCode,respOptions,respPayload)
+
+    # ======================== private =========================================
+
+    def lookupContentFormat(self, options=[]):
+        for option in options:
+            if isinstance(option, o.ContentFormat):
+                return option
+        return None
+
+
+# ============================ custom exceptions =========================================
+
+class AceException(Exception):
+    def __init__(self, reason=''):
+        assert type(reason) == str
+
+        # store params
+        self.reason = reason
+
+    def __str__(self):
+        return '{0}(reason={1})'.format(self.__class__.__name__, self.reason)
+
+class AceUnauthorized(AceException):
+    pass
+
+class AceBadRequest(AceException):
+    pass
+
+
+# ============================ main =========================================
 
 if __name__ == "__main__":
 
