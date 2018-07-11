@@ -22,6 +22,7 @@ log.addHandler(logging.NullHandler())
 import cbor
 import binascii
 import os
+import random
 
 # ======================== List of nodes that have joined ========================
 # format:
@@ -39,6 +40,19 @@ def joinedNodesLookup(id):
 
     return None
 
+# pick a node randomly from the list of all joined nodes, except the one passed as the parameter
+def pickJoinedNodeRandomly(skip=None):
+    if (len(joinedNodes) == 1 and skip == joinedNodes[0]) or len(joinedNodes) == 0:
+        return None
+
+    found = False
+    candidate = None
+
+    while found is False:
+        candidate = random.choice(joinedNodes)
+        if candidate != skip:
+            found = True
+    return candidate
 
 # ============ List of resources that can be accessed by any joined node =========
 
