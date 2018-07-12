@@ -476,6 +476,7 @@ class tokenResource(coapResource.coapResource):
 
             respCode = d.COAP_RC_2_04_CHANGED
             respPayload = [ord(b) for b in access_token_serialized]
+            respOptions += [o.ContentFormat(cformat=[d.FORMAT_CBOR])]
         except AceBadRequest:
             respCode = d.COAP_RC_4_00_BADREQUEST
         except (TypeError, NameError, ValueError, KeyError):
