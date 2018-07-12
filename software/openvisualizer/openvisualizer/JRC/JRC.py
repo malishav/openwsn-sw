@@ -408,9 +408,9 @@ class tokenResource(coapResource.coapResource):
             cnf_value = {
                 aceDefines.ACE_CWT_CNF_COSE_KEY : {
                     coseDefines.KEY_LABEL_KTY           : coseDefines.KEY_VALUE_SYMMETRIC,
-                    coseDefines.KEY_LABEL_ALG           : coseDefines.ALG_AES_CCM_16_64_128, # FIXME can be removed?
-                    coseDefines.KEY_LABEL_CLIENT_ID     : clientId,
-                    coseDefines.KEY_LABEL_SERVER_ID     : resourceServer['eui64'],
+                    # TODO assign IDs so they are unique
+                    coseDefines.KEY_LABEL_CLIENT_ID     : binascii.unhexlify('00'),
+                    coseDefines.KEY_LABEL_SERVER_ID     : binascii.unhexlify('01'),
                     coseDefines.KEY_LABEL_K             : os.urandom(16),  # generate random 128-bit key
                 }
             }
