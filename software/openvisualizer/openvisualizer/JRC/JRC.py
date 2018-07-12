@@ -417,15 +417,13 @@ class tokenResource(coapResource.coapResource):
 
             # Step 2. Construct CWT claims set
             cwt_claims_set = {}
-            cwt_claims_set[aceDefines.ACE_PARAMETERS_LABELS_SCOPE] = request[aceDefines.ACE_PARAMETERS_LABELS_SCOPE]
+            # claim to RS is implicitly known and corresponds to 'all-resources'
             cwt_claims_set[aceDefines.ACE_PARAMETERS_LABELS_CNF] = cnf_value
 
             # Step 3. Construct CWT by encrypting in a COSE_Encrypt0 wrapper the CWT claims set
 
             # COSE_Encrypt0 protected bucket
-            cwt_protected = {
-                coseDefines.COMMON_HEADER_PARAMETERS_ALG : coseDefines.ALG_AES_CCM_16_64_128
-            }
+            cwt_protected = ''
 
             # COSE_Encrypt0 unprotected bucket
             # generate a random 13-byte nonce FIXME can we use AES-CCM with 7-byte nonces here?
@@ -437,8 +435,8 @@ class tokenResource(coapResource.coapResource):
             # COSE Enc_structure from https://tools.ietf.org/html/draft-ietf-cose-msg-24#section-5.3
             encStructure = [
                 unicode('Encrypt0'),
-                cbor.dumps(cwt_protected),
-                '',
+                cwt_protected,     # protected bucket
+                '',                # additional data
             ]
 
             # the key to encrypt the CWT is derived from the OSCORE master secret, with info set to 'ACE'
@@ -464,7 +462,6 @@ class tokenResource(coapResource.coapResource):
 
             access_token = {}
             access_token[aceDefines.ACE_PARAMETERS_LABELS_ACCESS_TOKEN] = cbor.dumps(cwt)
-            access_token[aceDefines.ACE_PARAMETERS_LABELS_PROFILE] = aceDefines.ACE_OSCORE_PROFILE_ID           # FIXME can be removed
             access_token[aceDefines.ACE_PARAMETERS_LABELS_CNF] = cnf_value
 
             access_token_serialized = cbor.dumps(access_token)
