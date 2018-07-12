@@ -338,12 +338,14 @@ class tokenResource(coapResource.coapResource):
 
         respOptions     = []
         respPayload     = []
+        clientId        = []
 
         try:
             objectSecurity = oscoap.objectSecurityOptionLookUp(options)
 
             # the request MUST come be received over a secure OSCORE channel
             if objectSecurity is None:
+                log.info("Client requesting access over unprotected transport.")
                 raise AceUnauthorized
 
             clientId =  u.buf2str(objectSecurity.kid[:8])
@@ -351,8 +353,12 @@ class tokenResource(coapResource.coapResource):
             # if the client that is requesting an access token is not in the list of joined nodes, consider it unauthorized
             client = joinedNodesLookup(u.buf2str(clientId))
             if client is None:
+                log.info(
+                    "Client {0} not found in the list of authorized nodes.".format(binascii.hexlify(u.buf2str(clientId))))
                 raise AceUnauthorized
             # else: every joined node is considered authorized
+
+            log.info("Client {0}, deemed authorized, requests an access token.".format(binascii.hexlify(u.buf2str(clientId))))
 
             # we don't use aud parameter for the moment, RS is selected randomly by AS from the list of joined nodes
             # this allows the JRC to act as a discovery server, allowing the client to specify the resource it is interested in
@@ -364,14 +370,19 @@ class tokenResource(coapResource.coapResource):
             # proceed by checking the request format
             contentFormat = self.lookupContentFormat(options)
             if contentFormat is not None and contentFormat.format == d.FORMAT_CBOR:
+                log.info("Request is malformed: Content-Format is not set to CBOR.")
                 raise AceBadRequest
 
             request = cbor.loads(u.buf2str(payload))
+            log.debug("Request decoded as: {0}".format(request))
 
             if request[aceDefines.ACE_PARAMETERS_LABELS_GRANT_TYPE] != aceDefines.ACE_CBOR_ABBREVIATIONS_CLIENT_CREDENTIALS:
+                log.info("Request is malformed: grant_type is not set to \"client_credentials\".")
                 raise AceBadRequest
 
+            # scope parameter is necessary for now
             if request[aceDefines.ACE_PARAMETERS_LABELS_SCOPE] not in authorizedResources:
+                log.info("Request scope {0}: deemed unauthorized.".format(request[aceDefines.ACE_PARAMETERS_LABELS_SCOPE]))
                 raise AceUnauthorized
 
             # construct the access token
@@ -414,7 +425,7 @@ class tokenResource(coapResource.coapResource):
             ]
 
             # the key to encrypt the CWT is derived from the OSCORE master secret, with info set to 'ACE'
-            key = oscoap. _hkdfDeriveParameter(masterSecret=resourceServer['context'].masterSecret,
+            key = oscoap._hkdfDeriveParameter(masterSecret=resourceServer['context'].masterSecret,
                                                masterSalt=resourceServer['context'].masterSalt,
                                                id=resourceServer['context'].senderId,
                                                algorithm=coseDefines.AES_CCM_16_64_128,
@@ -443,11 +454,18 @@ class tokenResource(coapResource.coapResource):
 
             respCode = d.COAP_RC_2_04_CHANGED
             respPayload = [ord(b) for b in access_token_serialized]
-        except (AceBadRequest, TypeError, NameError):
+        except AceBadRequest:
+            respCode = d.COAP_RC_4_00_BADREQUEST
+        except (TypeError, NameError, ValueError, KeyError):
+            # in case of the built-in exceptions, the request is not properly formatted, send 4.00
+            log.debug("Exception occured while processing the request:\n===============================\n{0}\n===============================".format(traceback.format_exc()))
             respCode = d.COAP_RC_4_00_BADREQUEST
         except AceUnauthorized:
             respCode = d.COAP_RC_4_01_UNAUTHORIZED
-
+        except:
+            log.debug(
+                "Exception occured while processing the request:\n===============================\n{0}\n===============================".format(traceback.format_exc()))
+            raise
         return (respCode,respOptions,respPayload)
 
     # ======================== private =========================================
