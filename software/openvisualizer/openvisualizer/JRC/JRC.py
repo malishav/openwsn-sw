@@ -24,21 +24,15 @@ import cbor
 import binascii
 import os
 import random
+# ======================== List of Node objects that have joined and helpers ========================
 
-# ======================== List of nodes that have joined ========================
-# format:
-# {
-#   'eui64' : node_address_hex_string,
-#   'context' : oscoap.SecurityContext
-# }
 joinedNodes = []
 
 # id as a string
 def joinedNodesLookup(id):
     for node in joinedNodes:
-        if node['eui64'] == id:
+        if node.id == id:
             return node
-
     return None
 
 # pick a node randomly from the list of all joined nodes, except the one passed as the parameter
@@ -54,6 +48,8 @@ def pickJoinedNodeRandomly(skip=None):
         if candidate != skip:
             found = True
     return candidate
+
+# =======================================================================================
 
 # ============ List of resources that can be accessed by any joined node =========
 
@@ -104,6 +100,16 @@ class contextHandler():
                                              aeadAlgorithm=oscoap.AES_CCM_16_64_128())
 
         return context
+
+# ======================== Generic Node ======================================
+class Node():
+
+    def __init__(self, id, context=None, appSessionKey='', appCounter=0):
+
+        self.id = id                            # hex string
+        self.context = context                  # oscoap.securityContext
+        self.appSessionKey = appSessionKey      # hex string
+        self.appCounter = appCounter            # integer
 
 # ======================== Interface with OpenVisualizer ======================================
 class coapServer(eventBusClient.eventBusClient):
@@ -315,8 +321,18 @@ class joinResource(coapResource.coapResource):
         #objectSecurity = oscoap.objectSecurityOptionLookUp(options)
         #assert objectSecurity
 
-        #joinedNodes += [{'eui64' : u.buf2str(objectSecurity.kid[:8]), # remove last prepended byte
-        #                'context' : objectSecurity.context}]
+        # joinedNodes += [ Node(
+        #                       id=u.buf2str(objectSecurity.kid[:8]),
+        #                       context=objectSecurity.context,
+        #                       appSessionKey=oscoap.hkdfDeriveParameter(
+        #                                                           masterSecret=objectSecurity.context.masterSecret,
+        #                                                           masterSalt=objectSecurity.context.masterSalt,
+        #                                                           id=objectSecurity.context.recipientID,
+        #                                                           algorithm=coseDefines.ALG_AES_CCM_16_64_128,
+        #                                                           type='ACE',
+        #                                                           length=16),
+        #                       appCounter=1)
+        #                ]
 
         return (respCode,respOptions,respPayload)
 
