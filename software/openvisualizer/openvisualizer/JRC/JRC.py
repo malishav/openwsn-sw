@@ -24,6 +24,8 @@ import cbor
 import binascii
 import os
 import random
+import traceback
+
 # ======================== List of Node objects that have joined and helpers ========================
 
 joinedNodes = []
