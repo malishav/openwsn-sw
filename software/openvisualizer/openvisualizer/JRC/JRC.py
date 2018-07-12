@@ -364,7 +364,7 @@ class tokenResource(coapResource.coapResource):
             # proceed by checking the request format
             contentFormat = self.lookupContentFormat(options)
             if contentFormat is not None and contentFormat.format == d.FORMAT_CBOR:
-                raise TypeError
+                raise AceBadRequest
 
             request = cbor.loads(u.buf2str(payload))
 
