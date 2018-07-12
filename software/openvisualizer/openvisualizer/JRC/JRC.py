@@ -426,11 +426,15 @@ class tokenResource(coapResource.coapResource):
             cwt_protected = ''
 
             # COSE_Encrypt0 unprotected bucket
-            # generate a random 13-byte nonce FIXME can we use AES-CCM with 7-byte nonces here?
-            nonce = os.urandom(13)
+
+            # nonce is appCounter prepended with 13 - len(appCounter) zeros
+            nonce = u.buf2str(u.int2buf(resourceServer.appCounter, 13))
             cwt_unprotected = {
-                coseDefines.COMMON_HEADER_PARAMETERS_IV : nonce
+                coseDefines.COMMON_HEADER_PARAMETERS_PIV: resourceServer.appCounter
             }
+
+            # Don't forget to increment the appCounter
+            resourceServer.appCounter += 1
 
             # COSE Enc_structure from https://tools.ietf.org/html/draft-ietf-cose-msg-24#section-5.3
             encStructure = [
