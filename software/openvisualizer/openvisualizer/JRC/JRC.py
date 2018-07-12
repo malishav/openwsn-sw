@@ -369,7 +369,7 @@ class tokenResource(coapResource.coapResource):
 
             # proceed by checking the request format
             contentFormat = self.lookupContentFormat(options)
-            if contentFormat is not None and contentFormat.format == d.FORMAT_CBOR:
+            if contentFormat is None or contentFormat.format != d.FORMAT_CBOR:
                 log.info("Request is malformed: Content-Format is not set to CBOR.")
                 raise AceBadRequest
 
