@@ -380,7 +380,7 @@ class tokenResource(coapResource.coapResource):
             cnf_value = {
                 aceDefines.ACE_CWT_CNF_COSE_KEY : {
                     coseDefines.KEY_LABEL_KTY           : coseDefines.KEY_VALUE_SYMMETRIC,
-                    coseDefines.KEY_LABEL_ALG           : coseDefines.ALG_AES_CCM_16_64_128,
+                    coseDefines.KEY_LABEL_ALG           : coseDefines.ALG_AES_CCM_16_64_128, # FIXME can be removed?
                     coseDefines.KEY_LABEL_CLIENT_ID     : clientId,
                     coseDefines.KEY_LABEL_SERVER_ID     : resourceServer['eui64'],
                     coseDefines.KEY_LABEL_K             : os.urandom(16),  # generate random 128-bit key
@@ -435,7 +435,6 @@ class tokenResource(coapResource.coapResource):
             ]
 
             access_token = {}
-            access_token[aceDefines.ACE_PARAMETERS_LABELS_TOKEN_TYPE] = aceDefines.ACE_ACCESS_TOKEN_TYPE_POP    # FIXME can be removed
             access_token[aceDefines.ACE_PARAMETERS_LABELS_ACCESS_TOKEN] = cbor.dumps(cwt)
             access_token[aceDefines.ACE_PARAMETERS_LABELS_PROFILE] = aceDefines.ACE_OSCORE_PROFILE_ID           # FIXME can be removed
             access_token[aceDefines.ACE_PARAMETERS_LABELS_CNF] = cnf_value
