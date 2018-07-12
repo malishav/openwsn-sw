@@ -445,10 +445,12 @@ class tokenResource(coapResource.coapResource):
                 '',                # additional data
             ]
 
+            # FIXME code below is used for testing, appSessionKey derivation is done once the node joins the network
             # the key to encrypt the CWT is derived from the OSCORE master secret, with info set to 'ACE'
-            key = oscoap._hkdfDeriveParameter(masterSecret=resourceServer['context'].masterSecret,
-                                               masterSalt=resourceServer['context'].masterSalt,
-                                               id=resourceServer['context'].senderId,
+            key = oscoap.hkdfDeriveParameter(
+                                               #masterSecret=resourceServer['context'].masterSecret,
+                                               #masterSalt=resourceServer['context'].masterSalt,
+                                               #id=resourceServer['context'].senderId,
                                                algorithm=coseDefines.ALG_AES_CCM_16_64_128,
                                                type='ACE',
                                                length=16)
