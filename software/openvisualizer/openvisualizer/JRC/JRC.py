@@ -364,17 +364,18 @@ class tokenResource(coapResource.coapResource):
                 log.info("Client requesting access over unprotected transport.")
                 raise AceUnauthorized
 
-            clientId =  u.buf2str(objectSecurity.kid[:8])
+            clientId =  binascii.hexlify(u.buf2str(objectSecurity.kid))
 
             # if the client that is requesting an access token is not in the list of joined nodes, consider it unauthorized
-            client = joinedNodesLookup(u.buf2str(clientId))
+            client = joinedNodesLookup(clientId)
+
             if client is None:
                 log.info(
-                    "Client {0} not found in the list of authorized nodes.".format(binascii.hexlify(u.buf2str(clientId))))
+                    "Client {0} not found in the list of authorized nodes.".format(binascii.hexlify(clientId)))
                 raise AceUnauthorized
             # else: every joined node is considered authorized
 
-            log.info("Client {0}, deemed authorized, requests an access token.".format(binascii.hexlify(u.buf2str(clientId))))
+            log.info("Client {0}, deemed authorized, requests an access token.".format(binascii.hexlify(clientId)))
 
             # we don't use aud parameter for the moment, RS is selected randomly by AS from the list of joined nodes
             # this allows the JRC to act as a discovery server, allowing the client to specify the resource it is interested in
