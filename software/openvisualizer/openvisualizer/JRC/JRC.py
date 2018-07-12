@@ -428,7 +428,7 @@ class tokenResource(coapResource.coapResource):
             key = oscoap._hkdfDeriveParameter(masterSecret=resourceServer['context'].masterSecret,
                                                masterSalt=resourceServer['context'].masterSalt,
                                                id=resourceServer['context'].senderId,
-                                               algorithm=coseDefines.AES_CCM_16_64_128,
+                                               algorithm=coseDefines.ALG_AES_CCM_16_64_128,
                                                type='ACE',
                                                length=16)
 
