@@ -106,9 +106,10 @@ class contextHandler():
 # ======================== Generic Node ======================================
 class Node():
 
-    def __init__(self, id, context=None, appSessionKey='', appCounter=0):
+    def __init__(self, id, ipAddress='::1', context=None, appSessionKey='', appCounter=0):
 
         self.id = id                            # hex string
+        self.ipAddress = ipAddress              # IPv6 as a string
         self.context = context                  # oscoap.securityContext
         self.appSessionKey = appSessionKey      # hex string
         self.appCounter = appCounter            # integer
