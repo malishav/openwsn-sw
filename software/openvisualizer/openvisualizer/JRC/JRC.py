@@ -326,11 +326,8 @@ class joinResource(coapResource.coapResource):
         # joinedNodes += [ Node(
         #                       id=u.buf2str(objectSecurity.kid[:8]),
         #                       context=objectSecurity.context,
-        #                       appSessionKey=oscoap.hkdfDeriveParameter(
-        #                                                           masterSecret=objectSecurity.context.masterSecret,
-        #                                                           masterSalt=objectSecurity.context.masterSalt,
+        #                       appSessionKey=objectSecurity.context.hkdfDeriveParameter(
         #                                                           id=objectSecurity.context.recipientID,
-        #                                                           algorithm=coseDefines.ALG_AES_CCM_16_64_128,
         #                                                           type='ACE',
         #                                                           length=16),
         #                       appCounter=1)
@@ -447,11 +444,8 @@ class tokenResource(coapResource.coapResource):
 
             # FIXME code below is used for testing, appSessionKey derivation is done once the node joins the network
             # the key to encrypt the CWT is derived from the OSCORE master secret, with info set to 'ACE'
-            key = oscoap.hkdfDeriveParameter(
-                                               #masterSecret=resourceServer['context'].masterSecret,
-                                               #masterSalt=resourceServer['context'].masterSalt,
-                                               #id=resourceServer['context'].senderId,
-                                               algorithm=coseDefines.ALG_AES_CCM_16_64_128,
+            key = resourceServer.context.hkdfDeriveParameter(
+                                               id=resourceServer.context.senderID,
                                                type='ACE',
                                                length=16)
 
