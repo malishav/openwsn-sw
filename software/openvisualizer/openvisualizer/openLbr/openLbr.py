@@ -218,14 +218,15 @@ class OpenLbr(eventBusClient.eventBusClient):
                 log.debug(self._format_IPv6(ipv6,ipv6_bytes))
 
             # before forwarding a packet into the mesh, check if it is destined for the DAG root
+            # if it is, signal it on the event bus
             if self.networkPrefix and self.dagRootEui64 and ipv6['dst_addr'] == self.networkPrefix + self.dagRootEui64:
                 if ipv6['next_header'] == self.IANA_UDP:
                     udp_header = ipv6['payload'][:8]  # UDP header is fixed length of 8 bytes
-                    app_payload = ipv6['payload'][8:] # we don't care about length and checksum at this point
                     src_port = udp_header[0]<<8 | udp_header[1] # Network order
                     dst_port = udp_header[2]<<8 | udp_header[3] # Network order
                     dispatchSignal=(tuple(ipv6['dst_addr']), self.PROTO_UDP, dst_port)
-                    self._dispatchProtocol(dispatchSignal,(ipv6['src_addr'], app_payload))
+                    upperLayerData = {'udp_src_port' : src_port, 'app_payload' : ipv6['payload'][8:]} # omit UDP header
+                    self._dispatchProtocol(dispatchSignal,(ipv6['src_addr'], upperLayerData))
                     return
                 else:
                     log.error('unsupported packet received for the DAG root, next header {0}'.format(ipv6['next_header']))
@@ -347,6 +348,7 @@ class OpenLbr(eventBusClient.eventBusClient):
                 ipv6dic['icmpv6_code']=ipv6dic['payload'][1]
                 ipv6dic['icmpv6_checksum']=ipv6dic['payload'][2:4]
                 ipv6dic['app_payload']=ipv6dic['payload'][4:]
+                upperLayerData = ipv6dic['app_payload']
 
                 #this function does the job
                 dispatchSignal=(tuple(ipv6dic['dst_addr']),self.PROTO_ICMPv6,ipv6dic['icmpv6_type'])
@@ -416,6 +418,7 @@ class OpenLbr(eventBusClient.eventBusClient):
                     #substitute udp header by the uncompressed header.
                     ipv6dic['payload']        = newUdp
                     ipv6dic['payload_length'] = len(newUdp)
+                    upperLayerData = {'udp_src_port': ipv6dic['udp_src_port'], 'app_payload' : ipv6dic['app_payload']}
                 else:
                     #No UDP header compressed
                     ipv6dic['udp_src_port']=u.buf2int(ipv6dic['payload'][:2])
@@ -423,6 +426,7 @@ class OpenLbr(eventBusClient.eventBusClient):
                     ipv6dic['udp_length']=ipv6dic['payload'][4:6]
                     ipv6dic['udp_checksum']=ipv6dic['payload'][6:8]
                     ipv6dic['app_payload']=ipv6dic['payload'][8:]
+                    upperLayerData = {'udp_src_port': ipv6dic['udp_src_port'], 'app_payload' : ipv6dic['app_payload']}
 
                 dispatchSignal=(tuple(ipv6dic['dst_addr']),self.PROTO_UDP,ipv6dic['udp_dest_port'])
 
@@ -430,7 +434,7 @@ class OpenLbr(eventBusClient.eventBusClient):
             #as source address is being retrieved from the IPHC header, the signal includes it in case
             #receiver such as RPL DAO processing needs to know the source.
 
-            success = self._dispatchProtocol(dispatchSignal,(ipv6dic['src_addr'],ipv6dic['app_payload']))
+            success = self._dispatchProtocol(dispatchSignal,(ipv6dic['src_addr'], upperLayerData))
 
             if success:
                 return
