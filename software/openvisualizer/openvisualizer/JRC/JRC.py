@@ -507,12 +507,10 @@ class JoinResource(coapResource.coapResource):
 
         return (respCode,respOptions,respPayload)
 
-# ==================== Implementation of /token resource for implementing ACE framework =====================
+# ==================== Implementation of /token resource to hand out ACE authorization tokens =====================
+class TokenResource(coapResource.coapResource):
 
-class tokenResource(coapResource.coapResource):
-
-    def __init__(self):
-
+    def __init__(self, clientAuthorizationCallback, resourceServerLookupCallback):
         # initialize parent class
         coapResource.coapResource.__init__(
             self,
@@ -521,11 +519,12 @@ class tokenResource(coapResource.coapResource):
 
         self.addSecurityBinding((None, [d.METHOD_POST]))  # security context should be returned by the callback
 
-    def POST(self,options=[], payload=[]):
+        self.clientAuthorizationCallback = clientAuthorizationCallback
+        self.resourceServerLookupCallback = resourceServerLookupCallback
 
+    def POST(self,options=[], payload=[]):
         respOptions     = []
         respPayload     = []
-        clientId        = []
 
         try:
             objectSecurity = oscoap.objectSecurityOptionLookUp(options)
@@ -538,7 +537,8 @@ class tokenResource(coapResource.coapResource):
             clientId =  binascii.hexlify(u.buf2str(objectSecurity.kid))
 
             # if the client that is requesting an access token is not in the list of joined nodes, consider it unauthorized
-            client = joinedNodesLookup(clientId)
+            assert self.clientAuthorizationCallback
+            client = self.clientAuthorizationCallback(clientId)
 
             if client is None:
                 log.info(
@@ -553,7 +553,8 @@ class tokenResource(coapResource.coapResource):
             # and the JRC to communicate to the cliient which RS hosts such a resource
             # client contacts the RS by constructing its IPv6 address, based on RS's identifier (EUI-64), assuming they are
             # in the same 6TiSCH network
-            resourceServer = pickJoinedNodeRandomly(skip=client)
+            assert self.resourceServerLookupCallback
+            resourceServer = self.resourceServerLookupCallback()
 
             # proceed by checking the request format
             contentFormat = self.lookupContentFormat(options)
@@ -637,7 +638,7 @@ class tokenResource(coapResource.coapResource):
             access_token = {}
             access_token[aceDefines.ACE_PARAMETERS_LABELS_ACCESS_TOKEN] = cbor.dumps(cwt)
             access_token[aceDefines.ACE_PARAMETERS_LABELS_CNF] = cnf_value
-            access_token[aceDefines.ACE_PARAMETERS_LABELS_AUD] = "coap://[{0}]".format(resourceServer.ipAddress)
+            access_token[aceDefines.ACE_PARAMETERS_LABELS_AUD] = "coap://[{0}]".format(resourceServer.getIpAddress())
 
             access_token_serialized = cbor.dumps(access_token)
 
