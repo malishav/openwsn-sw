@@ -667,9 +667,9 @@ class TokenResource(coapResource.coapResource):
                 return option
         return None
 
+# =======================================================================================
 
-# ============================ custom exceptions =========================================
-
+# ============================ Custom Exceptions ========================================
 class AceException(Exception):
     def __init__(self, reason=''):
         assert type(reason) == str
@@ -686,6 +686,7 @@ class AceUnauthorized(AceException):
 class AceBadRequest(AceException):
     pass
 
+# =======================================================================================
 
 # ============================ main =========================================
 
