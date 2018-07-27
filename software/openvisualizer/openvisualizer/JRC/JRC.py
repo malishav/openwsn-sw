@@ -26,55 +26,214 @@ import os
 import random
 import traceback
 
-# ======================== List of Node objects that have joined and helpers ========================
-
-joinedNodes = []
-
-# id as a string
-def joinedNodesLookup(id):
-    for node in joinedNodes:
-        if node.id == id:
-            return node
-    return None
-
-# pick a node randomly from the list of all joined nodes, except the one passed as the parameter
-def pickJoinedNodeRandomly(skip=None):
-    if (len(joinedNodes) == 1 and skip == joinedNodes[0]) or len(joinedNodes) == 0:
-        return None
-
-    found = False
-    candidate = None
-
-    while found is False:
-        candidate = random.choice(joinedNodes)
-        if candidate != skip:
-            found = True
-    return candidate
-
+# ================ List of resources that can be accessed by any joined node ============
+authorizedResources = ['resource1']
 # =======================================================================================
 
-# ============ List of resources that can be accessed by any joined node =========
-
-authorizedResources = ['resource1']
+# ==== App-layer ID of the JRC as defined by draft-ietf-6tisch-minimal-security-06 ======
+JRC_ID = '4a5243'
+# =======================================================================================
 
 # ======================== Top Level JRC Class =============================
 class JRC():
+
     def __init__(self):
-        coapResource = joinResource()
-        #self.coapServer = coapServer(coapResource, contextHandler(coapResource).securityContextLookup)
-        self.coapServer = coapServer(coapResource)
+        self.sixtischNetwork = SixtischNetwork(
+            networkKey=u.str2buf(binascii.unhexlify('11111111111111111111111111111111')), # value of K1/K2 from 6TiSCH TD)
+            networkKeyIndex=0x01,
+            groupPSK='DEADBEEFCAFEDEADBEEFCAFEDEADBEEF',
+        )
+
+        self.externalClients = Network(
+            joinedNodes= [
+                Node(
+                    ipAddress='::1',
+                    id='636c69656e74',
+                    peerID=JRC_ID,
+                    pairwisePSK='000102030405060708090A0B0C0D0E0F',
+                    aeadAlgorithm=oscoap.AES_CCM_16_64_128()
+                ),
+            ],
+            groupPSK='000102030405060708090A0B0C0D0E0F'
+        )
+
+        self.networks = (self.sixtischNetwork, self.externalClients)
+
+        self.coapServer = CoapServer(networks=self.networks)
 
     def close(self):
         self.coapServer.close()
 
-# ======================== Security Context Handler =========================
-class contextHandler():
-    MASTERSECRET = binascii.unhexlify('DEADBEEFCAFEDEADBEEFCAFEDEADBEEF') # value of the OSCORE Master Secret from 6TiSCH TD
+# =======================================================================================
 
-    def __init__(self, joinResource):
-        self.joinResource = joinResource
+# =========================== Generic Joined Node =======================================
+class Node():
 
-    # ======================== Context Handler needs to be registered =============================
+    def __init__(self,
+                 ipAddress=None,
+                 appSessionKey=None,
+                 appCounter=1,
+                 context=None,          # oscoap.SecurityContext; used to bootstrap the identifier, if not passed security context is instantiated
+                 id=None,               # required when context is None
+                 peerID=None,           # required when context is None
+                 pairwisePSK=None,      # required when context is None
+                 aeadAlgorithm=None,    # required when context is None
+                 ):
+        self.ipAddress = ipAddress      # IPv6 as a string
+
+        if context is not None:
+            assert (id is None and peerID is None and pairwisePSK is None and aeadAlgorithm is None)
+            self.id = context.recipientID
+            self.context = context
+        else:
+            assert (id is not None and peerID is not None and pairwisePSK is not None and aeadAlgorithm is not None)
+            self.id = id
+
+            self.context = oscoap.SecurityContext(  # deriving a new security context
+                masterSecret=binascii.unhexlify(pairwisePSK),
+                senderID=binascii.unhexlify(peerID),
+                recipientID=binascii.unhexlify(id),
+                aeadAlgorithm=aeadAlgorithm
+            )
+
+        # if appSessionKey is not explicitly passed, use OSCORE derivation with "ACE" label to HKDF
+        if appSessionKey is not None:
+            self.appSessionKey = self.context.hkdfDeriveParameter(  # if no app session key is provided, derive a default
+                    id=self.id,
+                    type='ACE',
+                    length=16
+            )
+        else:
+            self.appSessionKey = appSessionKey                      # hex string
+
+        self.appCounter = appCounter                                # integer
+
+    # ======================== public ==========================================
+
+    def setIpAddress(self, ipAddress):
+        self.ipAddress = ipAddress
+
+    def getIpAddress(self):
+        return self.ipAddress
+
+# =======================================================================================
+
+# ======================= Abstraction of a Network ======================================
+class Network():
+
+    def __init__(self, networkPrefix=[], joinedNodes=[], groupPSK=''):
+        self.networkPrefix = networkPrefix
+        self.joinedNodes = joinedNodes
+        self.groupPSK = groupPSK
+
+    # ======================== public ==========================================
+
+    def setNetworkPrefix(self, networkPrefix):
+        self.networkPrefix = networkPrefix
+
+    def getNetworkPrefix(self):
+        return self.networkPrefix
+
+    def joinedNodesUpdate(self, nodes):
+        assert len(self.getNetworkPrefix()) < 9
+
+        for node in nodes:
+            hostPart = u.str2buf(binascii.unhexlify(node.id))
+            assert len(hostPart) < 9
+
+            ipAddress = [0]*16
+            ipAddress[:len(self.getNetworkPrefix())] = self.getNetworkPrefix()
+            ipAddress[16-len(hostPart) : 16] = hostPart
+
+            node.setIpAddress(openvisualizer.openvisualizer_utils.formatIPv6Addr(ipAddress))
+            self.joinedNodes += [node]
+
+    # id as a string
+    def joinedNodesLookup(self, id):
+        for node in self.joinedNodes:
+            if node.id == id:
+                return node
+        return None
+
+    # pick a node randomly from the list of all joined nodes, except the one passed as the parameter
+    def pickJoinedNodeRandomly(self, skip=None):
+        if (len(self.joinedNodes) == 1 and skip == self.joinedNodes[0]) or len(self.joinedNodes) == 0:
+            return None
+
+        found = False
+        candidate = None
+
+        while found is False:
+            candidate = random.choice(self.joinedNodes)
+            if candidate != skip:
+                found = True
+        return candidate
+
+    # ======================== Default context handler based on a group PSK =============================
+    # ========================       needs to be registered  with CoAP      =============================
+    def securityContextLookup(self, kid):
+        # if kid is found in the list of joined nodes, return the appropriate context
+        # this is crucial for replay protection
+        node = self.joinedNodesLookup(kid)
+        if node is not None:
+            log.info("Node {0} found in joinedNodes. Returning context {1}.".format(binascii.hexlify(node.id), str(node.context)))
+            context = node.context
+        else:
+            log.info("Node {0} not found in joinedNodes. Instantiating new context based on the master secret.".format(binascii.hexlify(kid)))
+
+            # if recipientID is not found, create a new tentative context but only add it to the list of joined nodes in the GET
+            # handler of the join resource
+            context = oscoap.SecurityContext(  # deriving a new security context
+                masterSecret=binascii.unhexlify(self.groupPSK),
+                senderID=binascii.unhexlify(JRC_ID),
+                recipientID=kid,
+                aeadAlgorithm=oscoap.AES_CCM_16_64_128()
+            )
+
+        return context
+
+# =======================================================================================
+
+# ========================= a 6TiSCH Network Class ======================================
+class SixtischNetwork(Network):
+
+    def __init__(self,  dagRootEui64=None, panID=None, networkKey=None, networkKeyIndex=None, networkPrefix=None, joinedNodes=[], groupPSK=''):
+        Network.__init__(self, networkPrefix=networkPrefix, joinedNodes=joinedNodes, groupPSK=groupPSK)
+
+        self.dagRootEui64 = dagRootEui64
+        self.panID = panID
+        self.networkKey = networkKey
+        self.networkKeyIndex = networkKeyIndex
+
+    # ======================== public ==========================================
+
+    def setDagRootEui64(self, dagRootEui64):
+        self.dagRootEui64 = dagRootEui64
+
+    def getDagRootEui64(self):
+        return self.dagRootEui64
+
+    def setPanID(self, panID):
+        self.panID = panID
+
+    def getPanID(self):
+        return self.panID
+
+    def setNetworkKey(self, networkKey):
+        self.networkKey = networkKey
+
+    def getNetworkKey(self):
+        return self.networkKey
+
+    def setNetworkKeyIndex(self, networkKeyIndex):
+        self.networkKeyIndex = networkKeyIndex
+
+    def getNetworkKeyIndex(self):
+        return self.networkKeyIndex
+
+    def getNetworkKeyAndIndex(self):
+        return (self.networkKeyIndex, self.networkKey)
+
     def securityContextLookup(self, kid):
         kidBuf = u.str2buf(kid)
 
@@ -84,35 +243,24 @@ class contextHandler():
 
         # if eui-64 is found in the list of joined nodes, return the appropriate context
         # this is important for replay protection
-        node = joinedNodesLookup(u.buf2str(eui64))
+        node = self.joinedNodesLookup(u.buf2str(eui64))
 
         if node is not None:
-            log.info("Node {0} found in joinedNodes. Returning context {1}.".format(binascii.hexlify(node['eui64']),
-                                                                                    str(node['context'])))
-            context = node['context']
+            log.info("Node {0} found in joinedNodes. Returning context {1}.".format(node.id, str(node.context)))
+            context = node.context
         else:
-            log.info("Node {0} not found in joinedNodes. Instantiating new context based on the master secret.".format(
-                binascii.hexlify(u.buf2str(eui64))))
+            log.info("Node {0} not found in joinedNodes. Instantiating new context based on the master secret.".format(u.buf2str(eui64)))
 
             # if eui-64 is not found, create a new tentative context but only add it to the list of joined nodes in the GET
             # handler of the join resource
-            context = oscoap.SecurityContext(masterSecret=self.MASTERSECRET,
+            context = oscoap.SecurityContext(masterSecret=binascii.unhexlify(self.groupPSK),
                                              senderID=u.buf2str(senderID),
                                              recipientID=u.buf2str(recipientID),
                                              aeadAlgorithm=oscoap.AES_CCM_16_64_128())
 
         return context
 
-# ======================== Generic Node ======================================
-class Node():
-
-    def __init__(self, id, ipAddress='::1', context=None, appSessionKey='', appCounter=0):
-
-        self.id = id                            # hex string
-        self.ipAddress = ipAddress              # IPv6 as a string
-        self.context = context                  # oscoap.securityContext
-        self.appSessionKey = appSessionKey      # hex string
-        self.appCounter = appCounter            # integer
+# =======================================================================================
 
 # ======================== Interface with OpenVisualizer ======================================
 class coapServer(eventBusClient.eventBusClient):
