@@ -262,28 +262,34 @@ class SixtischNetwork(Network):
 
 # =======================================================================================
 
-# ======================== Interface with OpenVisualizer ======================================
-class coapServer(eventBusClient.eventBusClient):
+# ====================== CoAP Interface with OpenVisualizer =============================
+class CoapServer(eventBusClient.eventBusClient):
     # link-local prefix
     LINK_LOCAL_PREFIX = [0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 
-    def __init__(self, coapResource, contextHandler=None):
+    def __init__(self, networks=(None,None)):
         # log
         log.info("create instance")
 
-        self.coapResource = coapResource
+        (self.sixtischNetwork, self.externalNetwork) = networks
+        self.joinResource = JoinResource(
+            networkKeyLookupCb=self.sixtischNetwork.getNetworkKeyAndIndex,
+            updateJoinedNodesCb=self.sixtischNetwork.joinedNodesUpdate
+        )
+        self.tokenResource = TokenResource(
+            clientAuthorizationCallback=self.externalNetwork.joinedNodesLookup,
+            resourceServerLookupCallback=self.sixtischNetwork.pickJoinedNodeRandomly)
 
         # run CoAP server in testing mode
         # this mode does not open a real socket, rather uses PyDispatcher for sending/receiving messages
         # We interface this mode with OpenVisualizer to run JRC co-located with the DAG root
         self.coapServer = coap.coap(udpPort=d.DEFAULT_UDP_PORT, testing=True)
-        self.coapServer.addResource(coapResource)
-        #self.coapServer.addSecurityContextHandler(contextHandler)
+        self.coapServer.addResource(self.joinResource)
+        self.coapServer.addResource(self.tokenResource)
+        self.coapServer.addSecurityContextHandler(self.externalNetwork.securityContextLookup)
         self.coapServer.maxRetransmit = 1
 
         self.coapClient = None
-
-        self.dagRootEui64 = None
 
         # store params
 
@@ -327,7 +333,7 @@ class coapServer(eventBusClient.eventBusClient):
         '''
         Return L2 security key for the network.
         '''
-        return {'index' : [self.coapResource.networkKeyIndex], 'value' : self.coapResource.networkKey}
+        return {'index' : [self.sixtischNetwork.getNetworkKeyIndex()], 'value' : self.sixtischNetwork.getNetworkKey()}
 
     def _registerDagRoot_notif(self, sender, signal, data):
         # register for the global address of the DAG root
@@ -338,7 +344,7 @@ class coapServer(eventBusClient.eventBusClient):
                 self.PROTO_UDP,
                 d.DEFAULT_UDP_PORT
             ),
-            callback=self._receiveFromMesh,
+            callback=self._receiveFromMeshOrInternet,
         )
 
         # register to receive at link-local DAG root's address
@@ -349,10 +355,11 @@ class coapServer(eventBusClient.eventBusClient):
                 self.PROTO_UDP,
                 d.DEFAULT_UDP_PORT
             ),
-            callback=self._receiveFromMesh,
+            callback=self._receiveFromMeshOrInternet,
         )
 
-        self.dagRootEui64 = data['host']
+        self.sixtischNetwork.setNetworkPrefix(data['prefix'])
+        self.sixtischNetwork.setDagRootEui64(data['host'])
 
     def _unregisterDagRoot_notif(self, sender, signal, data):
         # unregister global address
@@ -363,7 +370,7 @@ class coapServer(eventBusClient.eventBusClient):
                 self.PROTO_UDP,
                 d.DEFAULT_UDP_PORT
             ),
-            callback=self._receiveFromMesh,
+            callback=self._receiveFromMeshOrInternet,
         )
         # unregister link-local address
         self.unregister(
@@ -373,20 +380,27 @@ class coapServer(eventBusClient.eventBusClient):
                 self.PROTO_UDP,
                 d.DEFAULT_UDP_PORT
             ),
-            callback=self._receiveFromMesh,
+            callback=self._receiveFromMeshOrInternet,
         )
 
-        self.dagRootEui64 = None
+        self.sixtischNetwork.setDagRootEui64(None)
+        self.sixtischNetwork.setNetworkPrefix(None)
 
-    def _receiveFromMesh(self, sender, signal, data):
+    def _receiveFromMeshOrInternet(self, sender, signal, data):
         '''
         Receive packet from the mesh destined for JRC's CoAP server.
         Forwards the packet to the virtual CoAP server running in test mode (PyDispatcher).
         '''
-        sender = openvisualizer.openvisualizer_utils.formatIPv6Addr(data[0])
-        # FIXME pass source port within the signal and open coap client at this port
-        self.coapClient = coap.coap(ipAddress=sender, udpPort=d.DEFAULT_UDP_PORT, testing=True, receiveCallback=self._receiveFromCoAP)
-        self.coapClient.socketUdp.sendUdp(destIp='', destPort=d.DEFAULT_UDP_PORT, msg=data[1]) # low level forward of the CoAP message
+        (srcIPv6, dataDict) = data
+        srcUdpPort = dataDict['udp_src_port']
+        appData = dataDict['app_payload']
+
+        sender = openvisualizer.openvisualizer_utils.formatIPv6Addr(srcIPv6)
+
+        # create an ephemeral coap client object to (re)transmit the message on the event bus of the coap server
+        self.coapClient = coap.coap(ipAddress=sender, udpPort=srcUdpPort , testing=True, receiveCallback=self._receiveFromCoAP)
+        self.coapClient.socketUdp.sendUdp(destIp='', destPort=d.DEFAULT_UDP_PORT, msg=appData) # low level forward of the CoAP message
+        self.coapClient.close()
         return True
 
     def _receiveFromCoAP(self, timestamp, sender, data):
@@ -394,8 +408,6 @@ class coapServer(eventBusClient.eventBusClient):
         Receive CoAP response and forward it to the mesh network.
         Appends UDP and IPv6 headers to the CoAP message and forwards it on the Eventbus towards the mesh.
         '''
-        self.coapClient.close()
-
         # UDP
         udplen = len(data) + 8
 
@@ -411,7 +423,7 @@ class coapServer(eventBusClient.eventBusClient):
         # source address of the packet is DAG root's IPV6 address
         # use the same prefix (link-local or global) as in the destination address
         srcIpv6Address = dstIpv6Address[:8]
-        srcIpv6Address += self.dagRootEui64
+        srcIpv6Address += self.sixtischNetwork.getDagRootEui64()
         assert len(srcIpv6Address)==16
 
         # CRC See https://tools.ietf.org/html/rfc2460.
@@ -434,20 +446,26 @@ class coapServer(eventBusClient.eventBusClient):
         ip += dstIpv6Address  # destination
         ip += udp
 
-        # announce network prefix
-        self.dispatch(
-            signal        = 'v6ToMesh',
-            data          = ip
-        )
+        # if destination IPv6 does not match the network prefix, and is not link-local, send to Internet
+        # special case is when sending from the TUN interface that has the same prefix as the mesh network but ends in 0x01
+        if (dstIpv6Address[:8] != self.sixtischNetwork.getNetworkPrefix() and dstIpv6Address[:8] != self.LINK_LOCAL_PREFIX) \
+                or (dstIpv6Address == self.sixtischNetwork.getNetworkPrefix() + [0, 0, 0, 0, 0, 0, 0, 1]):
+            self.dispatch(
+                signal='v6ToInternet',
+                data=ip
+            )
+        else:
+            self.dispatch(
+                signal        = 'v6ToMesh',
+                data          = ip
+            )
 
-# ==================== Implementation of CoAP join resource =====================
-class joinResource(coapResource.coapResource):
-    def __init__(self):
+# =======================================================================================
 
-        #self.networkKey = u.str2buf(os.urandom(16)) # random key every time OpenVisualizer is initialized
-        self.networkKey = u.str2buf(binascii.unhexlify('11111111111111111111111111111111')) # value of K1/K2 from 6TiSCH TD
-        self.networkKeyIndex = 0x01 # L2 key index
+# ======================== Implementation of CoAP Join Resource =========================
+class JoinResource(coapResource.coapResource):
 
+    def __init__(self, networkKeyLookupCb, updateJoinedNodesCb):
         # initialize parent class
         coapResource.coapResource.__init__(
             self,
@@ -456,11 +474,16 @@ class joinResource(coapResource.coapResource):
 
         self.addSecurityBinding((None, [d.METHOD_POST]))  # security context should be returned by the callback
 
+        self.networkKeyLookupCb = networkKeyLookupCb
+        self.updateJoinedNodesCb = updateJoinedNodesCb
+
     def POST(self,options=[], payload=[]):
         respCode        = d.COAP_RC_2_04_CHANGED
         respOptions     = []
 
-        link_layer_keyset = [self.networkKeyIndex, u.buf2str(self.networkKey)]
+        assert self.networkKeyLookupCb
+        (id, key) = self.networkKeyLookupCb()
+        link_layer_keyset = [id, u.buf2str(key)]
 
         configuration = {}
 
