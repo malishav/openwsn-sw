@@ -217,6 +217,20 @@ class OpenLbr(eventBusClient.eventBusClient):
             if log.isEnabledFor(logging.DEBUG):
                 log.debug(self._format_IPv6(ipv6,ipv6_bytes))
 
+            # before forwarding a packet into the mesh, check if it is destined for the DAG root
+            if self.networkPrefix and self.dagRootEui64 and ipv6['dst_addr'] == self.networkPrefix + self.dagRootEui64:
+                if ipv6['next_header'] == self.IANA_UDP:
+                    udp_header = ipv6['payload'][:8]  # UDP header is fixed length of 8 bytes
+                    app_payload = ipv6['payload'][8:] # we don't care about length and checksum at this point
+                    src_port = udp_header[0]<<8 | udp_header[1] # Network order
+                    dst_port = udp_header[2]<<8 | udp_header[3] # Network order
+                    dispatchSignal=(tuple(ipv6['dst_addr']), self.PROTO_UDP, dst_port)
+                    self._dispatchProtocol(dispatchSignal,(ipv6['src_addr'], app_payload))
+                    return
+                else:
+                    log.error('unsupported packet received for the DAG root, next header {0}'.format(ipv6['next_header']))
+                    return
+
             # convert IPv6 dictionary into 6LoWPAN dictionary
             lowpan           = self.ipv6_to_lowpan(ipv6)
 
