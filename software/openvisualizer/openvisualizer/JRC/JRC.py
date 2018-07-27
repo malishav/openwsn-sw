@@ -506,18 +506,15 @@ class JoinResource(coapResource.coapResource):
 
         respPayload     = [ord(b) for b in configuration_serialized]
 
-        #objectSecurity = oscoap.objectSecurityOptionLookUp(options)
-        #assert objectSecurity
+        objectSecurity = oscoap.objectSecurityOptionLookUp(options)
 
-        # joinedNodes += [ Node(
-        #                       id=u.buf2str(objectSecurity.kid[:8]),
-        #                       context=objectSecurity.context,
-        #                       appSessionKey=objectSecurity.context.hkdfDeriveParameter(
-        #                                                           id=objectSecurity.context.recipientID,
-        #                                                           type='ACE',
-        #                                                           length=16),
-        #                       appCounter=1)
-        #                ]
+        assert self.updateJoinedNodesCb
+        if objectSecurity is not None:
+            self.updateJoinedNodesCb(
+                [
+                    Node(context=objectSecurity.context),
+                ]
+            )
 
         return (respCode,respOptions,respPayload)
 
