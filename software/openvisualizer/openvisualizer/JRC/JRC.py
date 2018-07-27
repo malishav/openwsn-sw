@@ -121,7 +121,7 @@ class Node():
 # ======================= Abstraction of a Network ======================================
 class Network():
 
-    def __init__(self, networkPrefix=[], joinedNodes=[], groupPSK=''):
+    def __init__(self, networkPrefix=[], joinedNodes=[], groupPSK=None):
         self.networkPrefix = networkPrefix
         self.joinedNodes = joinedNodes
         self.groupPSK = groupPSK
@@ -174,11 +174,12 @@ class Network():
     def securityContextLookup(self, kid):
         # if kid is found in the list of joined nodes, return the appropriate context
         # this is crucial for replay protection
+        context=None
         node = self.joinedNodesLookup(kid)
         if node is not None:
             log.info("Node {0} found in joinedNodes. Returning context {1}.".format(binascii.hexlify(node.id), str(node.context)))
             context = node.context
-        else:
+        elif self.groupPSK is not None:
             log.info("Node {0} not found in joinedNodes. Instantiating new context based on the master secret.".format(binascii.hexlify(kid)))
 
             # if recipientID is not found, create a new tentative context but only add it to the list of joined nodes in the GET
@@ -235,6 +236,7 @@ class SixtischNetwork(Network):
         return (self.networkKeyIndex, self.networkKey)
 
     def securityContextLookup(self, kid):
+        context = None
         kidBuf = u.str2buf(kid)
 
         eui64 = kidBuf[:-1]
@@ -248,7 +250,7 @@ class SixtischNetwork(Network):
         if node is not None:
             log.info("Node {0} found in joinedNodes. Returning context {1}.".format(node.id, str(node.context)))
             context = node.context
-        else:
+        elif self.groupPSK is not None:
             log.info("Node {0} not found in joinedNodes. Instantiating new context based on the master secret.".format(u.buf2str(eui64)))
 
             # if eui-64 is not found, create a new tentative context but only add it to the list of joined nodes in the GET
