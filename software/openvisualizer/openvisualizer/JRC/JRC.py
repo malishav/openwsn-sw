@@ -30,6 +30,13 @@ import traceback
 authorizedResources = ['resource1']
 # =======================================================================================
 
+# ============= List of external clients that are authorized to access /token ===========
+# (OSCORE ID, OSCORE MasterSecret, IPv6 address)
+authorizedClients = [
+    ('636c69656e74', '000102030405060708090A0B0C0D0E0F', '::1'),
+]
+# =======================================================================================
+
 # ==== App-layer ID of the JRC as defined by draft-ietf-6tisch-minimal-security-06 ======
 JRC_ID = '4a5243'
 # =======================================================================================
@@ -45,16 +52,15 @@ class JRC():
         )
 
         self.externalClients = Network(
-            joinedNodes= [
+            joinedNodes=[
                 Node(
-                    ipAddress='::1',
-                    id='636c69656e74',
+                    ipAddress=ip,
+                    id=id,
                     peerID=JRC_ID,
-                    pairwisePSK='000102030405060708090A0B0C0D0E0F',
+                    pairwisePSK=psk,
                     aeadAlgorithm=oscoap.AES_CCM_16_64_128()
-                ),
+                ) for (id, psk, ip) in authorizedClients
             ],
-            groupPSK='000102030405060708090A0B0C0D0E0F'
         )
 
         self.networks = (self.sixtischNetwork, self.externalClients)
