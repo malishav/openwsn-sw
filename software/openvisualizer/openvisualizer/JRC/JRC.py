@@ -181,12 +181,13 @@ class Network():
         # if kid is found in the list of joined nodes, return the appropriate context
         # this is crucial for replay protection
         context=None
-        node = self.joinedNodesLookup(kid)
+        clientId=binascii.hexlify(kid)
+        node = self.joinedNodesLookup(clientId)
         if node is not None:
-            log.info("Node {0} found in joinedNodes. Returning context {1}.".format(binascii.hexlify(node.id), str(node.context)))
+            log.info("Node {0} found in joinedNodes. Returning context {1}.".format(node.id, str(node.context)))
             context = node.context
         elif self.groupPSK is not None:
-            log.info("Node {0} not found in joinedNodes. Instantiating new context based on the master secret.".format(binascii.hexlify(kid)))
+            log.info("Node {0} not found in joinedNodes. Instantiating new context based on a group PSK.".format(clientId))
 
             # if recipientID is not found, create a new tentative context but only add it to the list of joined nodes in the GET
             # handler of the join resource
@@ -196,6 +197,8 @@ class Network():
                 recipientID=kid,
                 aeadAlgorithm=oscoap.AES_CCM_16_64_128()
             )
+        else:
+            log.info("Node {0} not found in joinedNodes. No group PSK set, returning None.".format(clientId))
 
         return context
 
@@ -251,13 +254,14 @@ class SixtischNetwork(Network):
 
         # if eui-64 is found in the list of joined nodes, return the appropriate context
         # this is important for replay protection
-        node = self.joinedNodesLookup(u.buf2str(eui64))
+        eui64HexStr = binascii.hexlify(u.buf2str(eui64))
+        node = self.joinedNodesLookup(eui64HexStr)
 
         if node is not None:
             log.info("Node {0} found in joinedNodes. Returning context {1}.".format(node.id, str(node.context)))
             context = node.context
         elif self.groupPSK is not None:
-            log.info("Node {0} not found in joinedNodes. Instantiating new context based on the master secret.".format(u.buf2str(eui64)))
+            log.info("Node {0} not found in joinedNodes. Instantiating new context based on a group PSK.".format(eui64HexStr))
 
             # if eui-64 is not found, create a new tentative context but only add it to the list of joined nodes in the GET
             # handler of the join resource
@@ -265,6 +269,8 @@ class SixtischNetwork(Network):
                                              senderID=u.buf2str(senderID),
                                              recipientID=u.buf2str(recipientID),
                                              aeadAlgorithm=oscoap.AES_CCM_16_64_128())
+        else:
+            log.info("Node {0} not found in joinedNodes. No group PSK set, returning None.".format(eui64HexStr))
 
         return context
 
