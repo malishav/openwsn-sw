@@ -103,9 +103,9 @@ class Node():
             )
 
         # if appSessionKey is not explicitly passed, use OSCORE derivation with "ACE" label to HKDF
-        if appSessionKey is not None:
+        if appSessionKey is None:
             self.appSessionKey = self.context.hkdfDeriveParameter(  # if no app session key is provided, derive a default
-                    id=self.id,
+                    id=binascii.unhexlify(self.id),
                     type='ACE',
                     length=16
             )
@@ -628,11 +628,7 @@ class TokenResource(coapResource.coapResource):
 
             # FIXME code below is used for testing, appSessionKey derivation is done once the node joins the network
             # the key to encrypt the CWT is derived from the OSCORE master secret, with info set to 'ACE'
-            key = resourceServer.context.hkdfDeriveParameter(
-                                               id=resourceServer.context.senderID,
-                                               type='ACE',
-                                               length=16)
-
+            key = resourceServer.appSessionKey
             # generate the ciphertext by encrypting with the CCM algorithm
             ciphertext = oscoap.AES_CCM_16_64_128().authenticateAndEncrypt(aad=cbor.dumps(encStructure),
                                                                            plaintext=cbor.dumps(cwt_claims_set),
