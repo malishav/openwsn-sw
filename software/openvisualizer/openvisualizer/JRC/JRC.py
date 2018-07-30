@@ -645,7 +645,6 @@ class TokenResource(coapResource.coapResource):
             access_token = {}
             access_token[aceDefines.ACE_PARAMETERS_LABELS_ACCESS_TOKEN] = cbor.dumps(cwt)
             access_token[aceDefines.ACE_PARAMETERS_LABELS_CNF] = cnf_value
-            access_token[aceDefines.ACE_PARAMETERS_LABELS_AUD] = "coap://[{0}]".format(resourceServer.getIpAddress())
 
             access_token_serialized = cbor.dumps(access_token)
 
